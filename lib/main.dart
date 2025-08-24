@@ -5,6 +5,8 @@ import 'package:audioplayers/audioplayers.dart';
 void main() => runApp(MyApp());
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -34,6 +36,8 @@ class MyApp extends StatelessWidget {
 }
 
 class FirstScreen extends StatelessWidget {
+  const FirstScreen({super.key});
+
   void _navigate(BuildContext context, String audioFile) {
     Navigator.push(
       context,
@@ -79,7 +83,7 @@ class FirstScreen extends StatelessWidget {
 
 class SecondScreen extends StatefulWidget {
   final String audioFile;
-  SecondScreen({required this.audioFile});
+  const SecondScreen({super.key, required this.audioFile});
 
   @override
   _SecondScreenState createState() => _SecondScreenState();
@@ -89,11 +93,21 @@ class _SecondScreenState extends State<SecondScreen> {
   late AudioPlayer _player;
   bool _isPlaying = false;
   bool _showText = false;
+  StreamSubscription? _playerCompleteSubscription; // Add this
 
   @override
   void initState() {
     super.initState();
     _player = AudioPlayer();
+
+    // Listen for when the audio playback completes
+    _playerCompleteSubscription = _player.onPlayerComplete.listen((event) {
+      if (mounted) { // Check if the widget is still in the tree
+        setState(() {
+          _isPlaying = false;
+        });
+      }
+    });
   }
 
   Future<void> _toggleAudio() async {
@@ -102,9 +116,11 @@ class _SecondScreenState extends State<SecondScreen> {
     } else {
       await _player.play(AssetSource(widget.audioFile));
     }
-    setState(() {
-      _isPlaying = !_isPlaying;
-    });
+    if (mounted) { // Check if the widget is still in the tree
+      setState(() {
+        _isPlaying = !_isPlaying;
+      });
+    }
   }
 
   void _showTemporaryText() {
@@ -112,14 +128,17 @@ class _SecondScreenState extends State<SecondScreen> {
       _showText = true;
     });
     Timer(Duration(seconds: 1), () {
-      setState(() {
-        _showText = false;
-      });
+      if (mounted) { // Check if the widget is still in the tree
+        setState(() {
+          _showText = false;
+        });
+      }
     });
   }
 
   @override
   void dispose() {
+    _playerCompleteSubscription?.cancel(); // Cancel the subscription
     _player.dispose();
     super.dispose();
   }
