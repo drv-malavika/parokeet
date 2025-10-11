@@ -5,6 +5,11 @@
 .pub/
 build/
 
+# Desktop platform folders
+linux/
+macos/
+windows/
+
 # Flutter plugin/dependency cache
 .flutter-plugins
 .flutter-plugins-dependencies

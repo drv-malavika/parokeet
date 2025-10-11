@@ -1,18 +1,16 @@
 import 'dart:async';
 import 'dart:io'; // For File operations
 import 'package:flutter/material.dart';
+import 'package:parokeet/services/sentence_service.dart';
 
-// import 'package:audioplayers/audioplayers.dart'; // We'll replace audioplayers with TTS for this screen's primary function
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
-// import 'package:permission_handler/permission_handler.dart'; // For permission handling
 
 class SecondScreen extends StatefulWidget {
-  final String category; // Changed from audioFile, assuming category dictates sentences
-
+  final String category;
   const SecondScreen({super.key, required this.category});
 
   @override
@@ -20,45 +18,122 @@ class SecondScreen extends StatefulWidget {
 }
 
 class _SecondScreenState extends State<SecondScreen> {
-  late FlutterTts _flutterTts;
-  List<String> _sentences = [];
+  // State for data management
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _quoteCache = []; // Holds all fetched quotes (e.g., 100)
+  List<int> _seenQuoteIds = []; // Tracks IDs of all quotes ever shown
+  int _currentBatchPage = 0; // Tracks which set of 5 we are on (0, 1, 2...)
+
+  // State for UI and interaction
+  List<String> _sentences = []; // The current set of 5 sentences being displayed
   int _currentSentenceIndex = 0;
+  late FlutterTts _flutterTts;
   bool _isPlayingSpeech = false;
   bool _showHint = false;
   String _hintText = "";
   Timer? _hintTimer;
-
-  // Example sentences - replace with your generation logic
-  final Map<String, List<String>> _storySentences = {
-    "Stories": [
-      "The quick brown fox jumps over the lazy dog.",
-      "A journey of a thousand miles begins with a single step.",
-      "To be or not to be, that is the question.",
-      "All that glitters is not gold.",
-      "The cat sat on the mat, watching the rain fall softly."
-    ],
-    "Non-Fiction": [ // Add sentences for other categories if needed
-      "The mitochondria is the powerhouse of the cell.",
-      "Water boils at 100 degrees Celsius at sea level.",
-      "The Earth revolves around the Sun.",
-      "Gravity is the force that attracts a body toward the center of the earth.",
-      "Photosynthesis is the process used by plants to convert light energy into chemical energy."
-    ],
-    "Travel": [
-      "The Eiffel Tower is located in Paris, France.",
-      "The Great Wall of China is one of the New Seven Wonders of the World.",
-      "Machu Picchu is an Incan citadel set high in the Andes Mountains in Peru.",
-      "The Colosseum in Rome could hold an estimated 50,000 to 80,000 spectators.",
-      "Mount Everest is Earth's highest mountain above sea level."
-    ]
-    // Add more categories and their sentences
-  };
+  //Timer? _navTimer;
 
   @override
   void initState() {
     super.initState();
     _initializeTts();
-    _loadSentences();
+    _fetchInitialBatch(); // Fetch the first 100 quotes
+  }
+
+  /// Fetches a large batch of quotes from Supabase and displays the first page.
+  Future<void> _fetchInitialBatch() async {
+    // Only show the full-screen loading spinner on the very first fetch.
+    if (_quoteCache.isEmpty) {
+      setState(() { _isLoading = true; });
+    }
+
+    final newQuotes = await SentenceService.getQuotesForCategory(
+      category: widget.category,
+      excludedIds: _seenQuoteIds,
+    );
+
+    if (mounted) {
+      if (newQuotes.isNotEmpty) {
+        // If we got new quotes, add them to the cache and display them.
+        _quoteCache = newQuotes;
+        _currentBatchPage = 0;
+        _displayCurrentBatch();
+      } else {
+        // If NO new quotes were found, show a SnackBar and stay on the current screen.
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('No new set available.'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating, // Makes it look nicer
+          ),
+        );
+        // If this was the very first load, we need to stop the loading spinner.
+        if (_isLoading) {
+          setState(() {
+            _isLoading = false;
+            // Optionally, set a message if the screen would otherwise be blank
+            if (_sentences.isEmpty) {
+              _sentences = ["No quotes found for this category."];
+            }
+          });
+        }
+      }
+    }
+  }
+
+  // Takes the next 5 quotes from the cache and updates the UI.
+  void _displayCurrentBatch() {
+    int batchSize = 5;
+    int startIndex = _currentBatchPage * batchSize;
+
+    // Check if we have enough quotes in the cache for the next batch
+    if (startIndex >= _quoteCache.length) {
+      // We've exhausted the cache, time to fetch more
+      _fetchInitialBatch();
+      return;
+    }
+
+    int endIndex = startIndex + batchSize;
+    if (endIndex > _quoteCache.length) {
+      endIndex = _quoteCache.length; // Handle the last, possibly smaller, batch
+    }
+
+    final newBatch = _quoteCache.sublist(startIndex, endIndex);
+
+    setState(() {
+      _sentences = newBatch.map((q) => q['text'].toString()).toList();
+      _seenQuoteIds.addAll(newBatch.map((q) => q['id'] as int)); // Mark as seen
+      _currentSentenceIndex = 0;
+      _hintText = _sentences.first;
+      _isLoading = false;
+    });
+  }
+
+  // The "Refresh" button action
+  void _handleRefresh() {
+    int nextBatchPage = _currentBatchPage + 1;
+    int nextIndex = nextBatchPage * 5;
+
+    if (nextIndex < _quoteCache.length) {
+      // If the next batch is available in memory, just display it
+      setState(() {
+        _currentBatchPage++;
+        _displayCurrentBatch();
+      });
+    } else {
+      // If not, fetch a new batch from Supabase
+      _showInfoToast("Fetching new set...");
+      _fetchInitialBatch();
+    }
+  }
+
+  // Helper to show temporary info messages
+  void _showInfoToast(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+      content: Text(message),
+      duration: const Duration(seconds: 2),
+    ));
   }
 
   void _initializeTts() {
@@ -68,24 +143,6 @@ class _SecondScreenState extends State<SecondScreen> {
         setState(() {
           _isPlayingSpeech = false;
         });
-      }
-    });
-    // You can set language, pitch, rate here if needed
-    // _flutterTts.setLanguage("en-US");
-    // _flutterTts.setPitch(1.0);
-    // _flutterTts.setSpeechRate(0.5);
-  }
-
-  void _loadSentences() {
-    // In a real app, you might fetch these based on widget.category
-    setState(() {
-      _sentences =
-          _storySentences[widget.category] ?? // Use category from widget
-              _storySentences["Stories"]!; // Default to "Stories" if category not found
-      if (_sentences.isNotEmpty) {
-        _hintText = _sentences[_currentSentenceIndex];
-      } else {
-        _hintText = "No sentences available for this category.";
       }
     });
   }
@@ -129,12 +186,6 @@ class _SecondScreenState extends State<SecondScreen> {
     }
   }
 
-/*  void _toggleHint() {
-    setState(() {
-      _showHint = !_showHint;
-    });
-  }
-*/
   void _toggleHint() {
     setState(() {
       if (_sentences.isNotEmpty) {
@@ -164,22 +215,6 @@ class _SecondScreenState extends State<SecondScreen> {
 
   Future<void> _downloadTraceablePdf() async {
     if (_sentences.isEmpty) return;
-
-    // --- Basic Permission Check (Illustrative - needs robust handling) ---
-    // if (Platform.isAndroid) {
-    //   var status = await Permission.storage.status;
-    //   if (!status.isGranted) {
-    //     status = await Permission.storage.request();
-    //     if (!status.isGranted) {
-    //       ScaffoldMessenger.of(context).showSnackBar(
-    //         SnackBar(content: Text('Storage permission is required to download PDF.')),
-    //       );
-    //       return;
-    //     }
-    //   }
-    // }
-    // --- End Basic Permission Check ---
-
 
     final pdf = pw.Document();
     final sentence = _sentences[_currentSentenceIndex];
@@ -239,311 +274,97 @@ class _SecondScreenState extends State<SecondScreen> {
     }
   }
 
-
-/*  @override
-  void dispose() {
-    _flutterTts.stop();
-    super.dispose();
-  }*/
   @override
   void dispose() {
     _flutterTts.stop();
-    _hintTimer?.cancel(); // Important: Cancel the timer when the widget is disposed
+    _hintTimer?.cancel();
     super.dispose();
   }
 
-
-/*  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.category), // Show category in AppBar
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // Sentence Display Area (not directly visible, but provides content for TTS and Hint)
-              if (_sentences.isNotEmpty)
-                Text(
-                  'Sentence ${_currentSentenceIndex + 1} of ${_sentences
-                      .length}',
-                  style: Theme
-                      .of(context)
-                      .textTheme
-                      .titleMedium,
-                ),
-              const SizedBox(height: 20),
-
-              // Play/Pause Speech Button
-              ElevatedButton.icon(
-                onPressed: _sentences.isEmpty ? null : _speak,
-                icon: Icon(_isPlayingSpeech ? Icons.stop_circle_outlined : Icons
-                    .play_circle_filled),
-                label: Text(_isPlayingSpeech ? 'Stop' : 'Play Sentence'),
-                style: ElevatedButton.styleFrom(
-                    minimumSize: const Size(200, 50)),
-              ),
-              const SizedBox(height: 20),
-
-              // Navigation Buttons
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton(onPressed: _previousSentence,
-                      child: const Text('Previous')),
-                  ElevatedButton(
-                      onPressed: _nextSentence, child: const Text('Next')),
-                ],
-              ),
-              const SizedBox(height: 30),
-
-              // Hint Button
-              ElevatedButton(
-                onPressed: _sentences.isEmpty ? null : _toggleHint,
-                child: const Text('Hint'),
-              ),
-              const SizedBox(height: 10),
-
-              // Animated Opacity for Hint
-              AnimatedOpacity(
-                opacity: _showHint && _sentences.isNotEmpty ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 300),
-                child: _showHint && _sentences.isNotEmpty
-                    ? Container(
-                  height: 100, // Fixed height for the hint box
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blueGrey),
-                  ),
-                  child: Scrollbar( // Makes it scrollable
-                    thumbVisibility: true,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      // Padding so scrollbar doesn't overlap text
-                      child: Text(
-                        _hintText,
-                        style: const TextStyle(color: Colors.white,
-                            fontSize: 16),
-                      ),
-                    ),
-                  ),
-                )
-                    : const SizedBox(
-                    height: 100), // Keep space when hidden to avoid layout jumps
-              ),
-              const SizedBox(height: 30),
-
-              // Download PDF Button
-              ElevatedButton.icon(
-                onPressed: _sentences.isEmpty ? null : _downloadTraceablePdf,
-                icon: const Icon(Icons.download_for_offline),
-                label: const Text('Download Traceable PDF'),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
+  // --- Build Method ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.category),
         centerTitle: true,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              // ... (Sentence Display, Play/Pause, Navigation Buttons) ...
-              // These remain the same
-              if (_sentences.isNotEmpty)
-                Text(
-                  'Sentence ${_currentSentenceIndex + 1} of ${_sentences.length}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              const SizedBox(height: 20),
-
-              ElevatedButton.icon(
-                onPressed: _sentences.isEmpty ? null : _speak,
-                icon: Icon(_isPlayingSpeech ? Icons.stop_circle_outlined : Icons.play_circle_filled),
-                label: Text(_isPlayingSpeech ? 'Stop' : 'Play Sentence'),
-                style: ElevatedButton.styleFrom(minimumSize: const Size(200, 50)),
-              ),
-              const SizedBox(height: 20),
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton(onPressed: _previousSentence, child: const Text('Previous')),
-                  ElevatedButton(onPressed: _nextSentence, child: const Text('Next')),
-                ],
-              ),
-              const SizedBox(height: 30),
-
-              // Hint Button - No changes here
-              ElevatedButton(
-                onPressed: _sentences.isEmpty ? null : _toggleHint,
-                child: const Text('Hint'),
-              ),
-              const SizedBox(height: 10),
-
-              // Animated Opacity for Hint - No changes needed here, it reacts to _showHint
-              AnimatedOpacity(
-                opacity: _showHint && _sentences.isNotEmpty ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 300),
-                child: _showHint && _sentences.isNotEmpty
-                    ? Container(
-                  height: 100,
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blueGrey),
-                  ),
-                  child: Scrollbar(
-                    thumbVisibility: true,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: Text(
-                        _hintText,
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                    ),
-                  ),
-                )
-                    : const SizedBox(height: 100),
-              ),
-              const SizedBox(height: 30),
-
-              // Download PDF Button - No changes here
-              ElevatedButton.icon(
-                onPressed: _sentences.isEmpty ? null : _downloadTraceablePdf,
-                icon: const Icon(Icons.download_for_offline),
-                label: const Text('Download Traceable PDF'),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              ),
-            ],
+        actions: [
+          // Refresh Button added to the AppBar
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _isLoading ? null : _handleRefresh,
+            tooltip: 'Next Set',
           ),
-        ),
+        ],
       ),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : buildContent(), // Extracted content to a separate method
     );
-  }*/
+  }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text(widget.category),
-        centerTitle: true,
-      ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(20.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+  Widget buildContent() {
+    return Padding(
+      padding: const EdgeInsets.all(20.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Text(
+            'Sentence ${_currentSentenceIndex + 1} of ${_sentences.length}',
+            style: Theme.of(context).textTheme.titleMedium,
+          ),
+          const SizedBox(height: 30),
+          // Player Controls Row
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              // Sentence Information
-              if (_sentences.isNotEmpty)
-                Text(
-                  'Sentence ${_currentSentenceIndex + 1} of ${_sentences.length}',
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
-              const SizedBox(height: 30), // Increased spacing
-
-              // Player Controls Row
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  // Previous Button
-                  IconButton(
-                    icon: const Icon(Icons.skip_previous),
-                    iconSize: 36.0, // Adjust size as needed
-                    onPressed: _sentences.isEmpty ? null : _previousSentence,
-                    tooltip: 'Previous Sentence',
-                  ),
-
-                  // Play/Pause Button
-                  IconButton(
-                    icon: Icon(
-                      _isPlayingSpeech ? Icons.pause_circle_filled : Icons.play_circle_filled,
-                    ),
-                    iconSize: 64.0, // Make Play/Pause button larger
-                    onPressed: _sentences.isEmpty ? null : _speak,
-                    tooltip: _isPlayingSpeech ? 'Pause' : 'Play Sentence',
-                  ),
-
-                  // Next Button
-                  IconButton(
-                    icon: const Icon(Icons.skip_next),
-                    iconSize: 36.0, // Adjust size as needed
-                    onPressed: _sentences.isEmpty ? null : _nextSentence,
-                    tooltip: 'Next Sentence',
-                  ),
-                ],
+              IconButton(icon: const Icon(Icons.skip_previous), iconSize: 36.0, onPressed: _previousSentence),
+              IconButton(
+                icon: Icon(_isPlayingSpeech ? Icons.pause_circle_filled : Icons.play_circle_filled),
+                iconSize: 64.0,
+                onPressed: _speak,
               ),
-              const SizedBox(height: 40), // Increased spacing
-
-              // Hint Button - Smaller
-              TextButton( // Using TextButton for a less prominent look
-                onPressed: _sentences.isEmpty ? null : _toggleHint,
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  // You can also add side: BorderSide(color: Theme.of(context).colorScheme.outline) for an OutlinedButton feel
-                ),
-                child: const Text('Hint'),
-              ),
-              const SizedBox(height: 10),
-
-              // Animated Opacity for Hint (remains the same)
-              AnimatedOpacity(
-                opacity: _showHint && _sentences.isNotEmpty ? 1.0 : 0.0,
-                duration: const Duration(milliseconds: 300),
-                child: _showHint && _sentences.isNotEmpty
-                    ? Container(
-                  height: 100, // Fixed height for the hint box
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent.withOpacity(0.8),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.blueGrey),
-                  ),
-                  child: Scrollbar(
-                    thumbVisibility: true,
-                    child: SingleChildScrollView(
-                      padding: const EdgeInsets.only(right: 8.0),
-                      child: Text(
-                        _hintText,
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                    ),
-                  ),
-                )
-                    : const SizedBox(height: 100),
-              ),
-              const SizedBox(height: 30),
-
-              // Download PDF Button (remains the same)
-              ElevatedButton.icon(
-                onPressed: _sentences.isEmpty ? null : _downloadTraceablePdf,
-                icon: const Icon(Icons.download_for_offline),
-                label: const Text('Download Traceable PDF'),
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
-              ),
+              IconButton(icon: const Icon(Icons.skip_next), iconSize: 36.0, onPressed: _nextSentence),
             ],
           ),
-        ),
+          const SizedBox(height: 40),
+          // Hint Button
+          TextButton(onPressed: _toggleHint, child: const Text('Hint')),
+          const SizedBox(height: 10),
+          // Animated Opacity for Hint
+          AnimatedOpacity(
+            opacity: _showHint ? 1.0 : 0.0,
+            duration: const Duration(milliseconds: 300),
+            child: Container(
+              height: 100,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.blueAccent.withOpacity(0.8),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blueGrey),
+              ),
+              child: Scrollbar(
+                thumbVisibility: true,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: Text(
+                    _hintText, // The state variable holding the hint text
+                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 30),
+          // Download PDF Button
+          ElevatedButton.icon(
+            onPressed: _downloadTraceablePdf,
+            icon: const Icon(Icons.download_for_offline),
+            label: const Text('Download Traceable PDF'),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
+          ),
+        ],
       ),
     );
   }

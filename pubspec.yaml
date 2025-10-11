@@ -41,6 +41,7 @@ dependencies:
   path_provider: ^2.1.3 # For finding download paths
   open_filex: ^4.4.0 # For opening the PDF file (using open_filex as open_file is unmaintained)
   permission_handler: ^11.3.1 # Recommended for handling permissions properly
+  supabase_flutter: ^2.5.0
 
 dev_dependencies:
   flutter_test:

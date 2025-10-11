@@ -2,7 +2,21 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:parokeet/screens/first_screen.dart';
-void main() => runApp(MyApp());
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Initialize Supabase
+  await Supabase.initialize(
+    url: 'https://mdlruavreymzicezxiao.supabase.co', // Replace with your Project URL
+    anonKey: 'sb_publishable_AxeHtOud2F4GyuMvmMHT4g_738sWLut', // Replace with your anon Key
+  );
+
+  runApp(const MyApp());
+}
+
+final supabase = Supabase.instance.client;
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
