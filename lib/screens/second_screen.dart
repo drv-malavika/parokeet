@@ -1,3 +1,5 @@
+import 'dart:math';
+import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:io'; // For File operations
 import 'package:flutter/material.dart';
@@ -8,6 +10,8 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
+import 'package:flutter/foundation.dart' show kIsWeb; // To check if we are on the web
+import 'package:universal_html/html.dart' as html; // For web-specific download logic
 
 class SecondScreen extends StatefulWidget {
   final String category;
@@ -213,64 +217,180 @@ class _SecondScreenState extends State<SecondScreen> {
     });
   }
 
+  // Future<void> _downloadTraceablePdf() async {
+  //   if (_sentences.isEmpty) return;
+  //
+  //   final pdf = pw.Document();
+  //   final sentence = _sentences[_currentSentenceIndex];
+  //
+  //   // Basic tracing font (you might need to embed a proper dashed font for real tracing)
+  //   // final pw.Font ttf = pw.Font.ttf(await rootBundle.load("assets/fonts/YourTracingFont.ttf"));
+  //
+  //   pdf.addPage(
+  //     pw.Page(
+  //       pageFormat: PdfPageFormat.a4,
+  //       build: (pw.Context context) {
+  //         return pw.Center(
+  //           child: pw.Padding(
+  //             padding: const pw.EdgeInsets.all(30),
+  //             child: pw.Text(
+  //               sentence,
+  //               // style: pw.TextStyle(font: ttf, fontSize: 30, lineSpacing: 20), // Example with custom font
+  //               style: pw.TextStyle(fontSize: 28,
+  //                   lineSpacing: 15,
+  //                   color: PdfColors.grey700), // Basic style
+  //             ),
+  //           ),
+  //         );
+  //       },
+  //     ),
+  //   );
+  //
+  //   try {
+  //     final Directory? dir = await getDownloadsDirectory(); // More reliable for downloads
+  //     if (dir == null) {
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         const SnackBar(content: Text('Could not get downloads directory.')),
+  //       );
+  //       return;
+  //     }
+  //     final String path = '${dir.path}/traceable_sentence_${DateTime
+  //         .now()
+  //         .millisecondsSinceEpoch}.pdf';
+  //     final File file = File(path);
+  //     await file.writeAsBytes(await pdf.save());
+  //
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(
+  //         content: Text('PDF Downloaded to: $path'),
+  //         action: SnackBarAction(
+  //           label: 'Open',
+  //           onPressed: () {
+  //             OpenFilex.open(path);
+  //           },
+  //         ),
+  //       ),
+  //     );
+  //   } catch (e) {
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       SnackBar(content: Text('Failed to save PDF: $e')),
+  //     );
+  //   }
+  // }
+
   Future<void> _downloadTraceablePdf() async {
-    if (_sentences.isEmpty) return;
+    // Show a "generating" message to the user
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Generating Traceable PDF...')),
+    );
 
     final pdf = pw.Document();
-    final sentence = _sentences[_currentSentenceIndex];
 
-    // Basic tracing font (you might need to embed a proper dashed font for real tracing)
-    // final pw.Font ttf = pw.Font.ttf(await rootBundle.load("assets/fonts/YourTracingFont.ttf"));
+    // 1. Load the dotted font from assets
+    final fontData = await rootBundle.load("assets/fonts/Trace.ttf");
+    final ttf = pw.Font.ttf(fontData);
 
+    // 2. Prepare sentences with randomly missing words (This logic is the same)
+    final List<List<pw.Widget>> sentencesForPdf = [];
+    final random = Random();
+
+    for (String sentence in _sentences) {
+      List<String> words = sentence.split(' ');
+      List<pw.Widget> sentenceWidgets = [];
+      int wordsToRemoveCount = 1 + (words.length > 5 ? random.nextInt(2) : 0);
+      if (wordsToRemoveCount > words.length / 2) wordsToRemoveCount = 1;
+
+      Set<int> removedIndexes = {};
+      while (removedIndexes.length < wordsToRemoveCount && words.length > 1) {
+        removedIndexes.add(random.nextInt(words.length));
+      }
+
+      for (int i = 0; i < words.length; i++) {
+        if (removedIndexes.contains(i)) {
+          sentenceWidgets.add(pw.Container(
+            width: 80,
+            height: 20,
+            margin: const pw.EdgeInsets.symmetric(horizontal: 4.0),
+            decoration: const pw.BoxDecoration(
+              border: pw.Border(
+                  bottom: pw.BorderSide(color: PdfColors.grey, width: 1.0)),
+            ),
+          ));
+        } else {
+          sentenceWidgets.add(pw.Text(
+              '${words[i]} ', style: pw.TextStyle(font: ttf, fontSize: 22)));
+        }
+      }
+      sentencesForPdf.add(sentenceWidgets);
+    }
+
+    // 3. Add content to the PDF (This logic is the same)
     pdf.addPage(
       pw.Page(
-        pageFormat: PdfPageFormat.a4,
         build: (pw.Context context) {
-          return pw.Center(
-            child: pw.Padding(
-              padding: const pw.EdgeInsets.all(30),
-              child: pw.Text(
-                sentence,
-                // style: pw.TextStyle(font: ttf, fontSize: 30, lineSpacing: 20), // Example with custom font
-                style: pw.TextStyle(fontSize: 28,
-                    lineSpacing: 15,
-                    color: PdfColors.grey700), // Basic style
-              ),
-            ),
+          return pw.ListView(
+            children: sentencesForPdf.map((sentenceLine) {
+              return pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 20.0),
+                child: pw.Wrap(
+                  children: sentenceLine,
+                  alignment: pw.WrapAlignment.start,
+                  crossAxisAlignment: pw.WrapCrossAlignment.center,
+                ),
+              );
+            }).toList(),
           );
         },
       ),
     );
 
-    try {
-      final Directory? dir = await getDownloadsDirectory(); // More reliable for downloads
-      if (dir == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not get downloads directory.')),
-        );
-        return;
-      }
-      final String path = '${dir.path}/traceable_sentence_${DateTime
-          .now()
-          .millisecondsSinceEpoch}.pdf';
-      final File file = File(path);
-      await file.writeAsBytes(await pdf.save());
+    // 4. SAVE THE FILE - PLATFORM-AWARE LOGIC
+    final pdfBytes = await pdf.save();
+    final fileName = "traceable_sentences_${DateTime
+        .now()
+        .millisecondsSinceEpoch}.pdf";
+
+    if (kIsWeb) {
+      // --- WEB ---
+      // Create an "anchor" element in the browser's HTML
+      final anchor = html.AnchorElement(
+          href: Uri
+              .dataFromBytes(pdfBytes, mimeType: 'application/pdf')
+              .toString())
+        ..setAttribute("download", fileName);
+
+      // Trigger the download
+      anchor.click();
 
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('PDF Downloaded to: $path'),
-          action: SnackBarAction(
-            label: 'Open',
-            onPressed: () {
-              OpenFilex.open(path);
-            },
-          ),
-        ),
+        const SnackBar(content: Text('PDF download started in browser.')),
       );
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Failed to save PDF: $e')),
-      );
+    } else {
+      // --- MOBILE / DESKTOP ---
+      try {
+        final Directory? directory = await getDownloadsDirectory();
+        if (directory == null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+                content: Text("Could not find downloads directory.")),
+          );
+          return;
+        }
+        final path = "${directory.path}/$fileName";
+        final file = File(path);
+        await file.writeAsBytes(pdfBytes);
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF Downloaded to: $path')),
+        );
+
+        OpenFilex.open(path);
+      } catch (e) {
+        print("Error saving or opening PDF: $e");
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Failed to save or open PDF: $e")),
+        );
+      }
     }
   }
 
