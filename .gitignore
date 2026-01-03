@@ -21,3 +21,7 @@ windows/
 
 # OS junk files
 .DS_Store
+
+android/key.properties
+*.keystore
+*.jks

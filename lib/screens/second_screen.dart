@@ -3,7 +3,7 @@ import 'package:flutter/services.dart';
 import 'dart:async';
 import 'dart:io'; // For File operations
 import 'package:flutter/material.dart';
-import 'package:parokeet/services/sentence_service.dart';
+import 'package:Parokeet/services/sentence_service.dart';
 
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:pdf/pdf.dart';
@@ -278,19 +278,143 @@ class _SecondScreenState extends State<SecondScreen> {
   //   }
   // }
 
+  // Future<void> _downloadTraceablePdf() async {
+  //   // Show a "generating" message to the user
+  //   ScaffoldMessenger.of(context).showSnackBar(
+  //     const SnackBar(content: Text('Generating PDF...')),
+  //   );
+  //
+  //   final pdf = pw.Document();
+  //
+  //   // 1. Load the dotted font from assets
+  //   final fontData = await rootBundle.load("assets/fonts/memory.ttf");
+  //   final ttf = pw.Font.ttf(fontData);
+  //
+  //   // ---> ADD THIS: Load the trace font
+  //   final fontDataTrace = await rootBundle.load("assets/fonts/trace.ttf");
+  //   final ttfTrace = pw.Font.ttf(fontDataTrace);
+  //
+  //   // 2. Prepare sentences with randomly missing words (This logic is the same)
+  //   final List<List<pw.Widget>> sentencesForPdf = [];
+  //   final random = Random();
+  //
+  //   for (String sentence in _sentences) {
+  //     List<String> words = sentence.split(' ');
+  //     List<pw.Widget> sentenceWidgets = [];
+  //     int wordsToRemoveCount = 1 + (words.length > 5 ? random.nextInt(2) : 0);
+  //     if (wordsToRemoveCount > words.length / 2) wordsToRemoveCount = 1;
+  //
+  //     Set<int> removedIndexes = {};
+  //     while (removedIndexes.length < wordsToRemoveCount && words.length > 1) {
+  //       removedIndexes.add(random.nextInt(words.length));
+  //     }
+  //
+  //     for (int i = 0; i < words.length; i++) {
+  //       if (removedIndexes.contains(i)) {
+  //         sentenceWidgets.add(pw.Container(
+  //           width: 80,
+  //           height: 20,
+  //           margin: const pw.EdgeInsets.symmetric(horizontal: 4.0),
+  //           decoration: const pw.BoxDecoration(
+  //             border: pw.Border(
+  //                 bottom: pw.BorderSide(color: PdfColors.grey, width: 1.0)),
+  //           ),
+  //         ));
+  //       } else {
+  //         sentenceWidgets.add(pw.Text(
+  //             '${words[i]} ', style: pw.TextStyle(font: ttf, fontSize: 22)));
+  //       }
+  //     }
+  //     sentencesForPdf.add(sentenceWidgets);
+  //   }
+  //
+  //   // 3. Add content to the PDF (This logic is the same)
+  //   pdf.addPage(
+  //     pw.Page(
+  //       build: (pw.Context context) {
+  //         return pw.ListView(
+  //           children: sentencesForPdf.map((sentenceLine) {
+  //             return pw.Padding(
+  //               padding: const pw.EdgeInsets.symmetric(vertical: 20.0),
+  //               child: pw.Wrap(
+  //                 children: sentenceLine,
+  //                 alignment: pw.WrapAlignment.start,
+  //                 crossAxisAlignment: pw.WrapCrossAlignment.center,
+  //               ),
+  //             );
+  //           }).toList(),
+  //         );
+  //       },
+  //     ),
+  //   );
+  //
+  //   // 4. SAVE THE FILE - PLATFORM-AWARE LOGIC
+  //   final pdfBytes = await pdf.save();
+  //   final fileName = "traceable_sentences_${DateTime
+  //       .now()
+  //       .millisecondsSinceEpoch}.pdf";
+  //
+  //   if (kIsWeb) {
+  //     // --- WEB ---
+  //     // Create an "anchor" element in the browser's HTML
+  //     final anchor = html.AnchorElement(
+  //         href: Uri
+  //             .dataFromBytes(pdfBytes, mimeType: 'application/pdf')
+  //             .toString())
+  //       ..setAttribute("download", fileName);
+  //
+  //     // Trigger the download
+  //     anchor.click();
+  //
+  //     ScaffoldMessenger.of(context).showSnackBar(
+  //       const SnackBar(content: Text('PDF download started in browser.')),
+  //     );
+  //   } else {
+  //     // --- MOBILE / DESKTOP ---
+  //     try {
+  //       final Directory? directory = await getDownloadsDirectory();
+  //       if (directory == null) {
+  //         ScaffoldMessenger.of(context).showSnackBar(
+  //           const SnackBar(
+  //               content: Text("Could not find downloads directory.")),
+  //         );
+  //         return;
+  //       }
+  //       final path = "${directory.path}/$fileName";
+  //       final file = File(path);
+  //       await file.writeAsBytes(pdfBytes);
+  //
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text('PDF Downloaded to: $path')),
+  //       );
+  //
+  //       OpenFilex.open(path);
+  //     } catch (e) {
+  //       print("Error saving or opening PDF: $e");
+  //       ScaffoldMessenger.of(context).showSnackBar(
+  //         SnackBar(content: Text("Failed to save or open PDF: $e")),
+  //       );
+  //     }
+  //   }
+  // }
+
+  // In C:/Users/svrvs/src/parokeet/lib/screens/second_screen.dart
+
   Future<void> _downloadTraceablePdf() async {
     // Show a "generating" message to the user
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Generating Traceable PDF...')),
+      const SnackBar(content: Text('Generating PDF...')),
     );
 
     final pdf = pw.Document();
 
-    // 1. Load the dotted font from assets
-    final fontData = await rootBundle.load("assets/fonts/Trace.ttf");
-    final ttf = pw.Font.ttf(fontData);
+    // 1. Load BOTH fonts from assets
+    final fontData = await rootBundle.load("assets/fonts/memory.ttf");
+    final ttfMemory = pw.Font.ttf(fontData);
+    final fontDataTrace = await rootBundle.load("assets/fonts/trace.ttf"); // Load the new font
+    final ttfTrace = pw.Font.ttf(fontDataTrace);
 
-    // 2. Prepare sentences with randomly missing words (This logic is the same)
+    // 2. Prepare sentences with randomly missing words for the FIRST page
     final List<List<pw.Widget>> sentencesForPdf = [];
     final random = Random();
 
@@ -318,13 +442,13 @@ class _SecondScreenState extends State<SecondScreen> {
           ));
         } else {
           sentenceWidgets.add(pw.Text(
-              '${words[i]} ', style: pw.TextStyle(font: ttf, fontSize: 22)));
+              '${words[i]} ', style: pw.TextStyle(font: ttfMemory, fontSize: 22)));
         }
       }
       sentencesForPdf.add(sentenceWidgets);
     }
 
-    // 3. Add content to the PDF (This logic is the same)
+    // 3. Add the FIRST page (Fill-in-the-blanks)
     pdf.addPage(
       pw.Page(
         build: (pw.Context context) {
@@ -344,35 +468,46 @@ class _SecondScreenState extends State<SecondScreen> {
       ),
     );
 
-    // 4. SAVE THE FILE - PLATFORM-AWARE LOGIC
+    // ---> 4. ADD THE SECOND PAGE (Full Tracing) <---
+    pdf.addPage(
+      pw.Page(
+        build: (pw.Context context) {
+          return pw.ListView(
+            children: _sentences.map((sentence) {
+              return pw.Padding(
+                padding: const pw.EdgeInsets.symmetric(vertical: 20.0, horizontal: 10.0),
+                child: pw.Text(
+                  sentence,
+                  style: pw.TextStyle(font: ttfTrace, fontSize: 28, lineSpacing: 20),
+                ),
+              );
+            }).toList(),
+          );
+        },
+      ),
+    );
+
+    // 5. SAVE THE FILE (No changes needed here)
     final pdfBytes = await pdf.save();
-    final fileName = "traceable_sentences_${DateTime
-        .now()
-        .millisecondsSinceEpoch}.pdf";
+    final fileName = "traceable_sentences_${DateTime.now().millisecondsSinceEpoch}.pdf";
 
     if (kIsWeb) {
       // --- WEB ---
-      // Create an "anchor" element in the browser's HTML
       final anchor = html.AnchorElement(
-          href: Uri
-              .dataFromBytes(pdfBytes, mimeType: 'application/pdf')
-              .toString())
+          href: Uri.dataFromBytes(pdfBytes, mimeType: 'application/pdf').toString())
         ..setAttribute("download", fileName);
-
-      // Trigger the download
       anchor.click();
-
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('PDF download started in browser.')),
       );
     } else {
       // --- MOBILE / DESKTOP ---
       try {
-        final Directory? directory = await getDownloadsDirectory();
+        //final Directory? directory = await getDownloadsDirectory();
+        final Directory? directory = await getExternalStorageDirectory();
         if (directory == null) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-                content: Text("Could not find downloads directory.")),
+            const SnackBar(content: Text("Could not find downloads directory.")),
           );
           return;
         }
@@ -481,7 +616,7 @@ class _SecondScreenState extends State<SecondScreen> {
           ElevatedButton.icon(
             onPressed: _downloadTraceablePdf,
             icon: const Icon(Icons.download_for_offline),
-            label: const Text('Download Traceable PDF'),
+            label: const Text('Download PDF'),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.green),
           ),
         ],

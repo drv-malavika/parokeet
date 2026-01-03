@@ -1,4 +1,4 @@
-import 'package:parokeet/main.dart'; // Import to get the 'supabase' client instance
+import 'package:Parokeet/main.dart'; // Import to get the 'supabase' client instance
 
 class SentenceService {
   /// Fetches a batch of quotes for a given category from Supabase,

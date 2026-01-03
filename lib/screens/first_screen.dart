@@ -1,38 +1,41 @@
 import 'package:flutter/material.dart';
-import 'package:parokeet/screens/second_screen.dart';
+import 'package:Parokeet/screens/loopo_screen.dart'; // Import LoopoScreen
+import 'package:Parokeet/screens/second_screen.dart';
 
 class FirstScreen extends StatelessWidget {
   const FirstScreen({super.key});
 
+  // Updated to handle both category and Loopo navigation
   void _navigate(BuildContext context, String categoryName) {
-    // audioFile might still be used for background if you wish
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        // builder: (context) => SecondScreen(audioFile: audioFileForBackground), // Old
-        builder: (context) =>
-            SecondScreen(category: categoryName), // New: Pass category
-      ),
-    );
+    if (categoryName == 'loopo') {
+      // If the special category 'loopo' is passed, go to LoopoScreen
+      Navigator.push(
+        context,
+        MaterialPageRoute(builder: (context) => const LoopoScreen()),
+      );
+    } else {
+      // Otherwise, go to SecondScreen with the given category
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SecondScreen(category: categoryName),
+        ),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final List<Map<String, String>> buttonData = [
-      // We now pass the category name for sentence generation
-      // The 'filePath' could still be used if you want background audio *in addition* to TTS on SecondScreen
+      {'label': 'Stories', 'category': 'Stories'},
+      {'label': 'Non-Fiction', 'category': 'Non-Fiction'},
+      {'label': 'Travel', 'category': 'Travel'},
+      // v-- ADD THIS NEW ENTRY FOR LOOPO --v
       {
-        'label': 'Stories',
-        'category': 'Stories'
+        'label': 'Loopo',
+        'category': 'loopo' // Special identifier
       },
-      {
-        'label': 'Non-Fiction',
-        'category': 'Non-Fiction'
-      },
-      {
-        'label': 'Travel',
-        'category': 'Travel'
-      },
+      // ^-- END OF NEW ENTRY --^
     ];
 
     return Scaffold(
@@ -48,10 +51,11 @@ class FirstScreen extends StatelessWidget {
           mainAxisSpacing: 16.0,
           childAspectRatio: 1.5,
           children: buttonData.map((data) {
+            // Updated to handle custom styling for the Loopo button
             return buildAudioTile(
               context,
               data['label']!,
-              data['category']!, // This is the new category to pass
+              data['category']!,
             );
           }).toList(),
         ),
@@ -59,25 +63,27 @@ class FirstScreen extends StatelessWidget {
     );
   }
 
-  // Updated to accept and pass category
-  Widget buildAudioTile(BuildContext context, String label,
-      String category) {
+  // Updated to accept category and apply conditional logic/styling
+  Widget buildAudioTile(BuildContext context, String label, String category) {
+    // Determine if this tile is the Loopo button
+    final bool isLoopo = category == 'loopo';
+
     return ElevatedButton(
       style: ElevatedButton.styleFrom(
+        // Use a different color for the Loopo button to make it stand out
+        backgroundColor: isLoopo ? Colors.purple : Colors.deepPurple,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
       ),
-      // Pass category to _navigate, filePath might be for background audio on SecondScreen or removed if only TTS
       onPressed: () => _navigate(context, category),
-
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const Icon(Icons.menu_book, size: 40),
-          // Changed icon to represent stories/categories
+          // Use a different icon for Loopo
+          Icon(isLoopo ? Icons.sync_alt : Icons.menu_book, size: 40),
           const SizedBox(height: 8),
           Text(
             label,
